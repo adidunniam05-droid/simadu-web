@@ -1,136 +1,149 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { readFilters, buildQuery, SISWA_JENJANG_SQL, GTK_STATUS_GROUPS } from '@/lib/simadu-query';
+
+const toInt = (value) => parseInt(value ?? 0, 10) || 0;
+
+async function getDashboard() {
+  const [resKec, resLembaga, resGtk, resSiswa, resSebaran, resJenjang, resSiswaJenjang] =
+    await Promise.all([
+      db.query(`
+        SELECT DISTINCT ON (upper(trim(nama_kecamatan)))
+          kode_kecamatan, trim(nama_kecamatan) AS nama_kecamatan
+        FROM ref_kecamatan
+        WHERE nullif(trim(nama_kecamatan), '') IS NOT NULL
+        ORDER BY upper(trim(nama_kecamatan))
+      `),
+      db.query(`
+        SELECT
+          COUNT(*) AS total,
+          COUNT(*) FILTER (
+            WHERE nullif(trim(nsm), '') IS NOT NULL
+              AND nullif(trim(npsn), '') IS NOT NULL
+              AND coalesce(nullif(trim(kepala_madrasah), ''), '-') <> '-'
+          ) AS lengkap
+        FROM kelembagaan
+      `),
+      db.query(`
+        SELECT
+          COUNT(*) AS total,
+          COUNT(*) FILTER (WHERE ${GTK_STATUS_GROUPS.PNS}) AS pns,
+          COUNT(*) FILTER (WHERE ${GTK_STATUS_GROUPS.PPPK}) AS pppk,
+          COUNT(*) FILTER (WHERE ${GTK_STATUS_GROUPS.NON_PNS}) AS non_pns,
+          COUNT(*) FILTER (WHERE trim(status_ptk) = 'Aktif') AS aktif
+        FROM gtk
+      `),
+      db.query('SELECT COUNT(*) AS total FROM kesiswaan'),
+      db.query(`
+        SELECT upper(trim(kecamatan)) AS kecamatan, COUNT(*) AS jumlah
+        FROM kelembagaan
+        WHERE nullif(trim(kecamatan), '') IS NOT NULL
+        GROUP BY 1
+        ORDER BY jumlah DESC, kecamatan ASC
+      `),
+      db.query(`
+        SELECT upper(trim(jenjang)) AS jenjang, COUNT(*) AS jumlah
+        FROM kelembagaan
+        WHERE nullif(trim(jenjang), '') IS NOT NULL
+        GROUP BY 1
+      `),
+      db.query(`
+        SELECT ${SISWA_JENJANG_SQL} AS jenjang, COUNT(*) AS jumlah
+        FROM kesiswaan
+        GROUP BY 1
+      `),
+    ]);
+
+  const order = ['RA', 'MI', 'MTS', 'MA'];
+  const byOrder = (a, b) => order.indexOf(a.jenjang) - order.indexOf(b.jenjang);
+  const totalLembaga = toInt(resLembaga.rows[0].total);
+  const gtk = resGtk.rows[0];
+
+  return {
+    kecamatanList: resKec.rows,
+    stats: {
+      lembaga: totalLembaga,
+      lembagaLengkap: toInt(resLembaga.rows[0].lengkap),
+      gtk: {
+        total: toInt(gtk.total),
+        pns: toInt(gtk.pns),
+        pppk: toInt(gtk.pppk),
+        nonPns: toInt(gtk.non_pns),
+        aktif: toInt(gtk.aktif),
+      },
+      siswa: toInt(resSiswa.rows[0].total),
+    },
+    sebaranKecamatan: resSebaran.rows.map((r) => ({ kecamatan: r.kecamatan, jumlah: toInt(r.jumlah) })),
+    sebaranJenjang: resJenjang.rows
+      .map((r) => ({ jenjang: r.jenjang, jumlah: toInt(r.jumlah) }))
+      .sort(byOrder),
+    siswaPerJenjang: resSiswaJenjang.rows
+      .filter((r) => r.jenjang)
+      .map((r) => ({ jenjang: r.jenjang, jumlah: toInt(r.jumlah) }))
+      .sort(byOrder),
+  };
+}
+
+async function getOptions() {
+  const [ptk, kategori] = await Promise.all([
+    db.query(`
+      SELECT trim(status_ptk) AS value, COUNT(*) AS jumlah
+      FROM gtk
+      WHERE coalesce(nullif(trim(status_ptk), ''), '-') <> '-'
+      GROUP BY 1
+      ORDER BY jumlah DESC
+    `),
+    db.query(`
+      SELECT DISTINCT trim(kategori_utama) AS value
+      FROM berkas_sk
+      WHERE nullif(trim(kategori_utama), '') IS NOT NULL
+      ORDER BY 1
+    `),
+  ]);
+  return {
+    statusPtk: ptk.rows.map((r) => ({ value: r.value, jumlah: toInt(r.jumlah) })),
+    kategoriSk: kategori.rows.map((r) => r.value),
+  };
+}
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
-  const tab = searchParams.get('tab') || 'dashboard';
-  const search = searchParams.get('search') || '';
-  const kecamatan = searchParams.get('kecamatan') || 'ALL';
-  const jenjang = searchParams.get('jenjang') || 'ALL';
-  const page = parseInt(searchParams.get('page') || '1', 10);
-  const limit = 25;
-  const offset = (page - 1) * limit;
+  const filters = readFilters(searchParams);
 
   try {
-    if (tab === 'dashboard') {
-      const [resKec, resLembaga, resGtk, resSiswa, resSebaran, resJenjang] = await Promise.all([
-        db.query('SELECT kode_kecamatan, nama_kecamatan FROM ref_kecamatan ORDER BY nama_kecamatan ASC'),
-        db.query('SELECT COUNT(*) as total FROM kelembagaan'),
-        db.query(`
-          SELECT 
-            COUNT(*) as total,
-            COUNT(*) FILTER (WHERE UPPER(status_kepegawaian) = 'PNS') as pns,
-            COUNT(*) FILTER (WHERE UPPER(status_kepegawaian) = 'PPPK') as pppk,
-            COUNT(*) FILTER (WHERE UPPER(status_kepegawaian) NOT IN ('PNS', 'PPPK')) as non_pns
-          FROM gtk
-        `),
-        db.query('SELECT COUNT(*) as total FROM kesiswaan'),
-        db.query(`
-          SELECT kecamatan, COUNT(*) as jumlah 
-          FROM kelembagaan 
-          WHERE kecamatan IS NOT NULL AND kecamatan != ''
-          GROUP BY kecamatan 
-          ORDER BY jumlah DESC
-        `),
-        db.query(`
-          SELECT jenjang, COUNT(*) as jumlah 
-          FROM kelembagaan 
-          WHERE jenjang IS NOT NULL AND jenjang != ''
-          GROUP BY jenjang 
-          ORDER BY jumlah DESC
-        `),
-      ]);
-
-      return NextResponse.json({
-        kecamatanList: resKec.rows,
-        stats: {
-          lembaga: parseInt(resLembaga.rows[0].total, 10),
-          gtk: {
-            total: parseInt(resGtk.rows[0].total, 10),
-            pns: parseInt(resGtk.rows[0].pns, 10),
-            pppk: parseInt(resGtk.rows[0].pppk, 10),
-            nonPns: parseInt(resGtk.rows[0].non_pns, 10),
-          },
-          siswa: parseInt(resSiswa.rows[0].total, 10),
-        },
-        sebaranKecamatan: resSebaran.rows,
-        sebaranJenjang: resJenjang.rows,
-      });
+    if (filters.tab === 'dashboard') {
+      return NextResponse.json(await getDashboard());
+    }
+    if (filters.tab === 'options') {
+      return NextResponse.json(await getOptions());
     }
 
-    if (tab === 'kelembagaan') {
-      const conditions = [];
-      const params = [];
-      if (kecamatan !== 'ALL') {
-        params.push(kecamatan.toUpperCase());
-        conditions.push(`UPPER(kecamatan) = $${params.length}`);
-      }
-      if (jenjang !== 'ALL') {
-        params.push(jenjang.toUpperCase());
-        conditions.push(`UPPER(jenjang) = $${params.length}`);
-      }
-      if (search) {
-        params.push(`%${search}%`);
-        conditions.push(`(nama_lembaga ILIKE $${params.length} OR nsm ILIKE $${params.length} OR npsn ILIKE $${params.length} OR kepala_madrasah ILIKE $${params.length})`);
-      }
-      const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-      const countRes = await db.query(`SELECT COUNT(*) as total FROM kelembagaan ${where}`, params);
+    const query = buildQuery(filters);
+    if (!query) {
+      return NextResponse.json({ error: 'Tab tidak dikenali' }, { status: 400 });
+    }
 
-      params.push(limit, offset);
-      const dataRes = await db.query(
-        `SELECT * FROM kelembagaan ${where} ORDER BY kecamatan ASC, nama_lembaga ASC LIMIT $${params.length - 1} OFFSET $${params.length}`,
+    const { table, where, orderBy, params } = query;
+    const offset = (filters.page - 1) * filters.pageSize;
+    const [countRes, dataRes] = await Promise.all([
+      db.query(`SELECT COUNT(*) AS total FROM ${table.from} ${where}`, params),
+      db.query(
+        `SELECT ${table.select} FROM ${table.from} ${where} ${orderBy}
+         LIMIT ${filters.pageSize} OFFSET ${offset}`,
         params
-      );
-      return NextResponse.json({ rows: dataRes.rows, total: parseInt(countRes.rows[0].total, 10) });
-    }
+      ),
+    ]);
 
-    if (tab === 'gtk') {
-      const conditions = [];
-      const params = [];
-      if (search) {
-        params.push(`%${search}%`);
-        conditions.push(`(nama_lengkap ILIKE $${params.length} OR nip_nik ILIKE $${params.length} OR nama_madrasah ILIKE $${params.length})`);
-      }
-      const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-      const countRes = await db.query(`SELECT COUNT(*) as total FROM gtk ${where}`, params);
-
-      params.push(limit, offset);
-      const dataRes = await db.query(
-        `SELECT * FROM gtk ${where} ORDER BY nama_lengkap ASC LIMIT $${params.length - 1} OFFSET $${params.length}`,
-        params
-      );
-      return NextResponse.json({ rows: dataRes.rows, total: parseInt(countRes.rows[0].total, 10) });
-    }
-
-    if (tab === 'kesiswaan') {
-      const conditions = [];
-      const params = [];
-      if (jenjang !== 'ALL') {
-        params.push(jenjang.toUpperCase());
-        conditions.push(`UPPER(jenjang) = $${params.length}`);
-      }
-      if (search) {
-        params.push(`%${search}%`);
-        conditions.push(`(nama_lengkap ILIKE $${params.length} OR nisn ILIKE $${params.length} OR nik ILIKE $${params.length} OR nama_sekolah ILIKE $${params.length})`);
-      }
-      const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-      const countRes = await db.query(`SELECT COUNT(*) as total FROM kesiswaan ${where}`, params);
-
-      params.push(limit, offset);
-      const dataRes = await db.query(
-        `SELECT * FROM kesiswaan ${where} ORDER BY id ASC LIMIT $${params.length - 1} OFFSET $${params.length}`,
-        params
-      );
-      return NextResponse.json({ rows: dataRes.rows, total: parseInt(countRes.rows[0].total, 10) });
-    }
-
-    if (tab === 'berkas_sk') {
-      const dataRes = await db.query('SELECT * FROM berkas_sk ORDER BY id DESC LIMIT 100');
-      return NextResponse.json({ rows: dataRes.rows, total: dataRes.rows.length });
-    }
-
-    return NextResponse.json({ error: 'Tab tidak dikenali' }, { status: 400 });
+    return NextResponse.json({
+      rows: dataRes.rows,
+      total: toInt(countRes.rows[0].total),
+      page: filters.page,
+      pageSize: filters.pageSize,
+      sort: filters.sort,
+      dir: filters.dir,
+    });
   } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('API simadu error:', error);
+    return NextResponse.json({ error: 'Gagal memuat data dari database.' }, { status: 500 });
   }
 }
