@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "exceljs": "^3.4.0",
     "lucide-react": "^1.73.0",
     "next": "16.4.6",

@@ -1,36 +1,45 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SIMADU Kemenag Kab. Jember
 
-## Getting Started
+Aplikasi web SIMADU untuk Kantor Kementerian Agama Kabupaten Jember, dibangun dengan Next.js, Tailwind CSS, dan PostgreSQL.
 
-First, run the development server:
+## Struktur Folder
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```
+simadu-web/
+├── app/
+│   ├── api/
+│   │   ├── export/route.js   # Ekspor data ke Excel
+│   │   ├── login/route.js    # Autentikasi pengguna
+│   │   └── simadu/route.js   # Data dashboard & tabel
+│   ├── globals.css
+│   ├── layout.tsx
+│   └── page.tsx              # Halaman utama (login + dashboard)
+├── lib/
+│   └── db.js                 # Koneksi PostgreSQL
+├── public/
+│   └── images/               # Aset gambar
+├── .env.example              # Contoh konfigurasi environment
+└── package.json
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Menjalankan Secara Lokal
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Install dependency:
+   ```bash
+   npm install
+   ```
+2. Salin `.env.example` menjadi `.env.local`, lalu isi `DATABASE_URL`.
+3. Jalankan server development:
+   ```bash
+   npm run dev
+   ```
+4. Buka [http://localhost:3000](http://localhost:3000).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Skrip
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Perintah        | Fungsi                     |
+| --------------- | -------------------------- |
+| `npm run dev`   | Server development         |
+| `npm run build` | Build produksi             |
+| `npm run start` | Menjalankan hasil build    |
+| `npm run lint`  | Pemeriksaan kode (ESLint)  |
