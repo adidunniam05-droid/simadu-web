@@ -142,6 +142,12 @@ const JENJANG_OPTIONS = [
   { value: 'MTS', label: 'MTs' },
   { value: 'MA', label: 'MA' },
 ];
+const JENJANG_NAMES: Record<string, string> = {
+  RA: 'Raudhatul Athfal',
+  MI: 'Madrasah Ibtidaiyah',
+  MTS: 'Madrasah Tsanawiyah',
+  MA: 'Madrasah Aliyah',
+};
 const jenjangLabel = (v: unknown) =>
   JENJANG_OPTIONS.find((j) => j.value === String(v ?? '').toUpperCase())?.label ?? String(v ?? '-');
 
@@ -693,6 +699,20 @@ export default function SimaduApp() {
   const firstRow = totalRecords === 0 ? 0 : (filters.page - 1) * filters.pageSize + 1;
   const lastRow = Math.min(filters.page * filters.pageSize, totalRecords);
   const activeMenu = sidebarMenus.find((m) => m.id === activeTab);
+  const kelembagaanSub = [
+    { value: 'ALL', label: 'Semua lembaga', short: 'Semua', title: 'Semua jenjang', count: dashboardData ? totalLembaga : null },
+    ...JENJANG_OPTIONS.map((j) => ({
+      value: j.value,
+      label: JENJANG_NAMES[j.value].replace(/^Madrasah /, ''),
+      short: j.label,
+      title: `${JENJANG_NAMES[j.value]} (${j.label})`,
+      count: dashboardData ? sebaranJenjang.find((x) => x.jenjang === j.value)?.jumlah ?? 0 : null,
+    })),
+  ];
+  const pageTitle =
+    activeTab === 'kelembagaan' && filters.jenjang !== 'ALL'
+      ? `Kelembagaan • ${JENJANG_NAMES[filters.jenjang]}`
+      : activeMenu?.label;
   const userName = user.nama_lengkap || user.username;
   const initials = userName
     .split(/\s+/)
@@ -766,18 +786,61 @@ export default function SimaduApp() {
           {sidebarMenus.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
+            const hasSub = item.id === 'kelembagaan';
             return (
-              <button
-                key={item.id}
-                onClick={() => goToTab(item.id)}
-                aria-current={isActive ? 'page' : undefined}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold transition cursor-pointer ${
-                  isActive ? 'bg-[#01533B] text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                }`}
-              >
-                <Icon className="w-[18px] h-[18px]" />
-                <span>{item.label}</span>
-              </button>
+              <div key={item.id}>
+                <button
+                  onClick={() => goToTab(item.id, hasSub ? {} : undefined)}
+                  aria-current={isActive && !hasSub ? 'page' : undefined}
+                  aria-expanded={hasSub ? true : undefined}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold transition cursor-pointer ${
+                    isActive
+                      ? hasSub
+                        ? 'bg-[#E8F2EE] text-[#01533B]'
+                        : 'bg-[#01533B] text-white'
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                >
+                  <Icon className="w-[18px] h-[18px]" />
+                  <span className="flex-1 text-left">{item.label}</span>
+                  {hasSub && <ChevronDown className="w-4 h-4 opacity-60" />}
+                </button>
+
+                {/* Submenu Kelembagaan: dibagi per jenjang */}
+                {hasSub && (
+                  <ul className="mt-1 mb-2 ml-5 pl-2 border-l border-slate-200 space-y-0.5">
+                    {kelembagaanSub.map((sub) => {
+                      const subActive = activeTab === 'kelembagaan' && filtersByTab.kelembagaan.jenjang === sub.value;
+                      return (
+                        <li key={sub.value}>
+                          <button
+                            onClick={() => goToTab('kelembagaan', sub.value === 'ALL' ? {} : { jenjang: sub.value })}
+                            aria-current={subActive ? 'page' : undefined}
+                            title={sub.title}
+                            className={`w-full flex items-center justify-between gap-2 pl-2.5 pr-2 py-2 rounded-lg text-[13px] transition cursor-pointer ${
+                              subActive
+                                ? 'bg-[#01533B] text-white font-semibold'
+                                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
+                            }`}
+                          >
+                            <span className="truncate">
+                              {sub.value !== 'ALL' && <span className="inline-block w-8 text-left font-bold">{sub.short}</span>}
+                              {sub.label}
+                            </span>
+                            <span
+                              className={`shrink-0 text-[11px] font-semibold px-1.5 rounded ${
+                                subActive ? 'bg-white/15 text-white' : 'text-slate-400'
+                              }`}
+                            >
+                              {sub.count === null ? '' : fmt(sub.count)}
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
             );
           })}
         </nav>
@@ -818,7 +881,7 @@ export default function SimaduApp() {
 
           <div className="min-w-0 flex-1">
             <h1 className="text-xl font-extrabold text-slate-900 truncate">
-              {activeTab === 'dashboard' ? `Selamat datang, ${userName}` : activeMenu?.label}
+              {activeTab === 'dashboard' ? `Selamat datang, ${userName}` : pageTitle}
             </h1>
             <p className="text-xs text-slate-500 truncate">
               Pendidikan Madrasah • Kantor Kementerian Agama Kabupaten Jember
@@ -884,6 +947,26 @@ export default function SimaduApp() {
             );
           })}
         </nav>
+
+        {activeTab === 'kelembagaan' && (
+          <nav aria-label="Jenjang lembaga" className="md:hidden flex items-center gap-2 overflow-x-auto px-4 py-2.5 bg-white border-b border-slate-200">
+            {kelembagaanSub.map((sub) => {
+              const subActive = filtersByTab.kelembagaan.jenjang === sub.value;
+              return (
+                <button
+                  key={sub.value}
+                  onClick={() => goToTab('kelembagaan', sub.value === 'ALL' ? {} : { jenjang: sub.value })}
+                  className={`shrink-0 px-3 py-1 rounded-full text-xs font-semibold border transition ${
+                    subActive ? 'bg-[#E8F2EE] border-[#01533B]/30 text-[#01533B]' : 'border-slate-200 text-slate-600'
+                  }`}
+                >
+                  {sub.short}
+                  {sub.count !== null && <span className="ml-1 opacity-60">{fmt(sub.count)}</span>}
+                </button>
+              );
+            })}
+          </nav>
+        )}
 
         <div className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6">
           {dataError && (
