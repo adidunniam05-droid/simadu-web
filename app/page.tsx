@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import Image from 'next/image';
 import {
-  User,
-  Lock,
   Eye,
   EyeOff,
   LayoutGrid,
@@ -140,40 +139,22 @@ const text = (v: unknown) => (v === null || v === undefined || String(v).trim() 
 // "Kelas 5 - Kelas 5" → "Kelas 5"; "Kelompok B - KELOMPOK B" → "Kelompok B"
 const cleanRombel = (v: unknown) => text(v).split(' - ')[0];
 
-// Komponen Logo Resmi SIMADU Kemenag (SVG tajam, tidak pernah pecah)
-function SimaduLogo({ size = 48 }: { size?: number }) {
+// Logo resmi SIMADU (ikon "S" buku + tulisan), file di public/images
+function SimaduLogo({ className = 'h-11 w-auto' }: { className?: string }) {
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 64 64"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className="shrink-0"
-    >
-      <polygon
-        points="32,3 57,17.5 57,46.5 32,61 7,46.5 7,17.5"
-        fill="#047857"
-        stroke="#FACC15"
-        strokeWidth="2.5"
-      />
-      <polygon
-        points="32,8 52,19.5 52,44.5 32,56 12,44.5 12,19.5"
-        fill="#065F46"
-        stroke="#FDE047"
-        strokeWidth="1"
-      />
-      <polygon
-        points="32,13 34.2,19.5 41,19.5 35.5,23.5 37.6,30 32,26 26.4,30 28.5,23.5 23,19.5 29.8,19.5"
-        fill="#FACC15"
-      />
-      <path
-        d="M19 36C24 34 29 35 32 38C35 35 40 34 45 36V45C40 43 35 44 32 47C29 44 24 43 19 45V36Z"
-        fill="#FFFFFF"
-      />
-    </svg>
+    <Image
+      src="/images/logo-simadu.png"
+      alt="SIMADU — Sistem Informasi Madrasah Terpadu"
+      width={900}
+      height={239}
+      priority
+      className={className}
+    />
   );
 }
+
+const SUPPORT_TEXT =
+  'Untuk pembuatan akun atau reset password, silakan hubungi Admin Penma Kantor Kementerian Agama Kabupaten Jember.';
 
 function Badge({ children, tone = 'slate' }: { children: React.ReactNode; tone?: string }) {
   const tones: Record<string, string> = {
@@ -290,6 +271,7 @@ export default function SimaduApp() {
   const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
+  const [showSupport, setShowSupport] = useState(false);
 
   // State Navigasi & Filter (filter disimpan terpisah per tab)
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
@@ -503,112 +485,151 @@ export default function SimaduApp() {
   };
 
   // =========================================================
-  // TAMPILAN 1: HALAMAN LOGIN GLASSMORPHISM (DESAIN BARU)
+  // TAMPILAN 1: HALAMAN LOGIN (panel hijau + formulir)
   // =========================================================
   if (!user) {
     return (
-      <div
-        className="relative min-h-screen w-full bg-cover bg-center flex items-center justify-center lg:justify-end px-4 sm:px-8 lg:px-20 bg-emerald-950"
-        style={{ backgroundImage: `url('/images/bg-madrasah.jpg')` }}
-      >
-        <div className="absolute inset-0 bg-black/15" />
+      <div className="min-h-screen w-full flex flex-col bg-white">
+        {/* Header */}
+        <header className="h-20 lg:h-24 shrink-0 flex items-center justify-between px-5 sm:px-10 lg:px-16 border-b border-slate-200 bg-white">
+          <SimaduLogo className="h-11 sm:h-14 w-auto" />
+          <a
+            href="https://kemenagjember.id"
+            className="text-sm sm:text-base font-bold text-[#01533B] hover:text-[#03422C] hover:underline underline-offset-4"
+          >
+            <span className="hidden sm:inline">Kembali ke </span>Beranda
+          </a>
+        </header>
 
-        <div className="relative z-10 w-full max-w-[440px] rounded-3xl bg-white/80 backdrop-blur-xl border border-white/60 shadow-2xl p-8 sm:p-10">
-          <div className="flex items-center gap-4 mb-8">
-            <SimaduLogo size={60} />
-            <div>
-              <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 leading-none">
-                SIMADU
-              </h1>
-              <p className="text-xs font-medium text-slate-700 mt-1">
-                Sistem Informasi Madrasah Terpadu
+        <div className="flex-1 grid lg:grid-cols-[minmax(0,48%)_minmax(0,1fr)]">
+          {/* Panel kiri: identitas */}
+          <section className="relative overflow-hidden bg-[#014D3B] text-white px-6 py-10 sm:px-10 lg:px-20 lg:pt-0 lg:pb-28 flex flex-col justify-center">
+            <Image
+              src="/images/logo-simadu-icon.png"
+              alt=""
+              aria-hidden
+              loading="eager"
+              width={451}
+              height={512}
+              className="pointer-events-none select-none absolute -left-24 -bottom-32 w-[20rem] lg:w-[27rem] h-auto opacity-[0.07] [filter:brightness(0)_invert(1)]"
+            />
+            <div className="relative max-w-xl">
+              <div className="h-1.5 w-28 rounded-full bg-[#DB9B09] mb-8" />
+              <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold leading-tight tracking-tight">
+                Sistem Informasi
+                <br />
+                Madrasah Terpadu
+              </h2>
+              <p className="mt-4 text-base sm:text-lg lg:text-2xl text-white/90">
+                Kementerian Agama Kabupaten Jember
               </p>
-              <p className="text-xs font-medium text-slate-600">
-                Pendma Kemenag Kab. Jember
-              </p>
             </div>
-          </div>
+          </section>
 
-          {loginError && (
-            <div className="mb-4 flex items-center gap-2 rounded-xl bg-rose-50 border border-rose-200 px-3.5 py-2.5 text-xs font-medium text-rose-700">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{loginError}</span>
-            </div>
-          )}
+          {/* Panel kanan: formulir */}
+          <section className="flex flex-col px-5 sm:px-10 lg:px-16">
+            <div className="flex-1 flex items-center justify-center py-10">
+              <div className="w-full max-w-[36rem]">
+                <h1 className="text-3xl sm:text-[2.75rem] sm:leading-tight font-extrabold tracking-tight text-slate-900">
+                  Masuk ke SIMADU
+                </h1>
+                <p className="mt-2 text-base sm:text-lg text-slate-600">Silakan masuk menggunakan akun Anda.</p>
 
-          <form onSubmit={handleLogin} className="space-y-5">
-            <div>
-              <label className="block text-sm font-medium text-slate-800 mb-1.5">
-                Username / NIP
-              </label>
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
-                  <User className="w-5 h-5" />
-                </span>
-                <input
-                  type="text"
-                  value={usernameInput}
-                  onChange={(e) => setUsernameInput(e.target.value)}
-                  placeholder="Masukkan Username / NIP"
-                  autoComplete="username"
-                  required
-                  className="w-full rounded-xl bg-white/95 border border-emerald-600/60 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/30 pl-11 pr-4 py-3 text-sm text-slate-800 outline-none transition"
-                />
+                {loginError && (
+                  <div
+                    role="alert"
+                    className="mt-6 flex items-center gap-2 rounded-lg bg-rose-50 border border-rose-200 px-3.5 py-2.5 text-sm font-medium text-rose-700"
+                  >
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{loginError}</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleLogin} className="mt-8 space-y-5">
+                  <div>
+                    <label htmlFor="login-username" className="block text-sm font-bold text-slate-900 mb-2">
+                      Username
+                    </label>
+                    <input
+                      id="login-username"
+                      type="text"
+                      value={usernameInput}
+                      onChange={(e) => setUsernameInput(e.target.value)}
+                      placeholder="Masukkan username"
+                      autoComplete="username"
+                      required
+                      className="w-full rounded-lg bg-white border border-slate-300 focus:border-[#01533B] focus:ring-2 focus:ring-[#01533B]/20 px-4 py-3 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="login-password" className="block text-sm font-bold text-slate-900 mb-2">
+                      Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        id="login-password"
+                        type={showPassword ? 'text' : 'password'}
+                        value={passwordInput}
+                        onChange={(e) => setPasswordInput(e.target.value)}
+                        placeholder="Masukkan password"
+                        autoComplete="current-password"
+                        required
+                        className="w-full rounded-lg bg-white border border-slate-300 focus:border-[#01533B] focus:ring-2 focus:ring-[#01533B]/20 pl-4 pr-12 py-3 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute inset-y-0 right-0 flex items-center px-3.5 text-slate-500 hover:text-slate-800"
+                        aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
+                      >
+                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      </button>
+                    </div>
+                    <div className="flex justify-end mt-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setShowSupport((v) => !v)}
+                        className="text-sm font-bold text-[#01533B] hover:underline underline-offset-4"
+                      >
+                        Lupa password?
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loginLoading}
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-[#01533B] hover:bg-[#03422C] disabled:opacity-60 text-white text-base font-bold py-3.5 shadow-sm transition cursor-pointer"
+                  >
+                    {loginLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {loginLoading ? 'Memverifikasi...' : 'Masuk'}
+                  </button>
+                </form>
+
+                {showSupport && (
+                  <div className="mt-5 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-900">
+                    {SUPPORT_TEXT}
+                  </div>
+                )}
+
+                <p className="mt-6 text-center text-sm text-slate-600">
+                  Butuh bantuan?{' '}
+                  <button
+                    type="button"
+                    onClick={() => setShowSupport((v) => !v)}
+                    className="font-bold text-[#01533B] hover:underline underline-offset-4"
+                  >
+                    Hubungi admin
+                  </button>
+                </p>
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-800 mb-1.5">
-                Password
-              </label>
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
-                  <Lock className="w-5 h-5" />
-                </span>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={passwordInput}
-                  onChange={(e) => setPasswordInput(e.target.value)}
-                  placeholder="••••••••"
-                  autoComplete="current-password"
-                  required
-                  className="w-full rounded-xl bg-white/95 border border-slate-200 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/30 pl-11 pr-11 py-3 text-sm text-slate-800 outline-none transition"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-slate-400 hover:text-slate-600"
-                  aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
-                >
-                  {showPassword ? (
-                    <Eye className="w-5 h-5" />
-                  ) : (
-                    <EyeOff className="w-5 h-5" />
-                  )}
-                </button>
-              </div>
-              <div className="flex justify-end mt-2">
-                <span className="text-xs font-medium text-slate-700">
-                  Lupa Password?
-                </span>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loginLoading}
-              className="w-full rounded-full bg-[#059669] hover:bg-[#047857] disabled:opacity-60 text-white font-semibold py-3.5 shadow-lg shadow-emerald-600/25 transition cursor-pointer"
-            >
-              {loginLoading ? 'Memverifikasi...' : 'Masuk'}
-            </button>
-          </form>
-
-          <p className="text-center text-xs text-slate-700 mt-6">
-            Belum punya akun?{' '}
-            <span className="font-semibold text-slate-900">
-              Hubungi Admin Penma Jember
-            </span>
-          </p>
+            <footer className="border-t border-slate-200 py-5 text-center text-xs sm:text-sm text-slate-500">
+              © 2026 Kementerian Agama Kabupaten Jember. All rights reserved.
+            </footer>
+          </section>
         </div>
       </div>
     );
@@ -671,16 +692,8 @@ export default function SimaduApp() {
     <div className="min-h-screen bg-[#F3F6F8] text-slate-800 flex">
       {/* Sidebar Kiri */}
       <aside className="w-64 bg-white border-r border-slate-200/70 hidden md:flex flex-col p-5 shrink-0">
-        <div className="flex items-center gap-3 px-2 mb-8">
-          <SimaduLogo size={44} />
-          <div>
-            <div className="text-xl font-extrabold tracking-tight text-slate-900 leading-none">
-              SIMADU
-            </div>
-            <div className="text-[10px] font-medium text-slate-500 mt-1">
-              Sistem Informasi Madrasah Terpadu
-            </div>
-          </div>
+        <div className="px-2 mb-8">
+          <SimaduLogo className="w-full h-auto" />
         </div>
 
         <nav className="space-y-1.5 flex-1">
@@ -693,7 +706,7 @@ export default function SimaduApp() {
                 onClick={() => goToTab(item.id)}
                 className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-medium transition cursor-pointer ${
                   isActive
-                    ? 'bg-gradient-to-r from-[#059669] to-[#10B981] text-white shadow-md shadow-emerald-600/20'
+                    ? 'bg-[#01533B] text-white shadow-md shadow-emerald-900/20'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
@@ -725,7 +738,7 @@ export default function SimaduApp() {
                 key={item.id}
                 onClick={() => goToTab(item.id)}
                 className={`shrink-0 inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition ${
-                  isActive ? 'bg-[#059669] text-white' : 'bg-white text-slate-600 border border-slate-200'
+                  isActive ? 'bg-[#01533B] text-white' : 'bg-white text-slate-600 border border-slate-200'
                 }`}
               >
                 <Icon className="w-4 h-4" />
@@ -787,7 +800,7 @@ export default function SimaduApp() {
             <button
               onClick={handleExportExcel}
               disabled={exporting}
-              className="inline-flex items-center gap-2 bg-[#059669] hover:bg-[#047857] disabled:opacity-60 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-sm transition cursor-pointer"
+              className="inline-flex items-center gap-2 bg-[#01533B] hover:bg-[#03422C] disabled:opacity-60 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-sm transition cursor-pointer"
             >
               {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
               <span>{exporting ? 'Menyiapkan...' : 'Export Excel (.xlsx)'}</span>
