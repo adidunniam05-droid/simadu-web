@@ -491,14 +491,8 @@ export default function SimaduApp() {
     return (
       <div className="min-h-screen w-full flex flex-col bg-white">
         {/* Header */}
-        <header className="h-20 lg:h-24 shrink-0 flex items-center justify-between px-5 sm:px-10 lg:px-16 border-b border-slate-200 bg-white">
+        <header className="h-20 lg:h-24 shrink-0 flex items-center px-5 sm:px-10 lg:px-16 border-b border-slate-200 bg-white">
           <SimaduLogo className="h-11 sm:h-14 w-auto" />
-          <a
-            href="https://kemenagjember.id"
-            className="text-sm sm:text-base font-bold text-[#01533B] hover:text-[#03422C] hover:underline underline-offset-4"
-          >
-            <span className="hidden sm:inline">Kembali ke </span>Beranda
-          </a>
         </header>
 
         <div className="flex-1 grid lg:grid-cols-[minmax(0,48%)_minmax(0,1fr)]">
