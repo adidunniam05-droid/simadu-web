@@ -49,6 +49,7 @@ interface DashboardData {
   sebaranKecamatan: { kecamatan: string; jumlah: number }[];
   sebaranJenjang: JenjangCount[];
   siswaPerJenjang: JenjangCount[];
+  gtkPerJenjang: JenjangCount[];
 }
 
 interface FilterOptions {
@@ -148,8 +149,35 @@ const JENJANG_NAMES: Record<string, string> = {
   MTS: 'Madrasah Tsanawiyah',
   MA: 'Madrasah Aliyah',
 };
-const jenjangLabel = (v: unknown) =>
-  JENJANG_OPTIONS.find((j) => j.value === String(v ?? '').toUpperCase())?.label ?? String(v ?? '-');
+const jenjangLabel = (v: unknown) => {
+  const s = String(v ?? '').toUpperCase();
+  if (s === 'LAINNYA') return 'Lainnya';
+  return JENJANG_OPTIONS.find((j) => j.value === s)?.label ?? (s || '-');
+};
+
+// Submenu per jenjang di sidebar untuk tab-tab ini
+type SubTab = 'kelembagaan' | 'kesiswaan' | 'gtk';
+const SUB_TABS: SubTab[] = ['kelembagaan', 'kesiswaan', 'gtk'];
+const isSubTab = (t: string): t is SubTab => (SUB_TABS as string[]).includes(t);
+const SUB_ALL_LABEL: Record<SubTab, string> = {
+  kelembagaan: 'Semua lembaga',
+  kesiswaan: 'Semua siswa',
+  gtk: 'Semua GTK',
+};
+// Data yang jenjangnya tidak bisa ditentukan (mis. GTK di Kantor Kemenag)
+const SUB_LAINNYA_LABEL: Record<SubTab, string> = {
+  kelembagaan: 'Lainnya',
+  kesiswaan: 'Lainnya',
+  gtk: 'Kantor & lainnya',
+};
+interface SubMenuItem {
+  value: string;
+  code: string;
+  label: string;
+  chip: string;
+  title: string;
+  count: number | null;
+}
 
 const GTK_STATUS_OPTIONS = [
   { value: 'PNS', label: 'PNS' },
@@ -263,6 +291,11 @@ const COLUMNS: Record<TableTab, Column[]> = {
       render: (r) => text(r.nama_lengkap),
     },
     { label: 'NIP / NIK', sort: 'nip', className: 'font-mono text-xs', render: (r) => text(r.nip_nik) },
+    {
+      label: 'Jenjang',
+      sort: 'jenjang',
+      render: (r) => (r.jenjang ? <Badge tone="emerald">{jenjangLabel(r.jenjang)}</Badge> : <Badge>Lainnya</Badge>),
+    },
     {
       label: 'Kepegawaian',
       sort: 'status',
@@ -701,19 +734,56 @@ export default function SimaduApp() {
   const firstRow = totalRecords === 0 ? 0 : (filters.page - 1) * filters.pageSize + 1;
   const lastRow = Math.min(filters.page * filters.pageSize, totalRecords);
   const activeMenu = sidebarMenus.find((m) => m.id === activeTab);
-  const kelembagaanSub = [
-    { value: 'ALL', label: 'Semua lembaga', short: 'Semua', title: 'Semua jenjang', count: dashboardData ? totalLembaga : null },
-    ...JENJANG_OPTIONS.map((j) => ({
-      value: j.value,
-      label: JENJANG_NAMES[j.value].replace(/^Madrasah /, ''),
-      short: j.label,
-      title: `${JENJANG_NAMES[j.value]} (${j.label})`,
-      count: dashboardData ? sebaranJenjang.find((x) => x.jenjang === j.value)?.jumlah ?? 0 : null,
-    })),
-  ];
+  // Isi submenu per jenjang (+ jumlah) untuk Kelembagaan, Kesiswaan, GTK
+  const subCounts: Record<SubTab, JenjangCount[]> = {
+    kelembagaan: sebaranJenjang,
+    kesiswaan: siswaPerJenjang,
+    gtk: dashboardData?.gtkPerJenjang ?? [],
+  };
+  const subTotals: Record<SubTab, number> = { kelembagaan: totalLembaga, kesiswaan: totalSiswa, gtk: totalGtk };
+  const subMenus = Object.fromEntries(
+    SUB_TABS.map((tab) => {
+      const countOf = (v: string) => (dashboardData ? subCounts[tab].find((x) => x.jenjang === v)?.jumlah ?? 0 : null);
+      const lainnya = countOf('LAINNYA');
+      const items: SubMenuItem[] = [
+        {
+          value: 'ALL',
+          code: '',
+          label: SUB_ALL_LABEL[tab],
+          chip: 'Semua',
+          title: 'Semua jenjang',
+          count: dashboardData ? subTotals[tab] : null,
+        },
+        ...JENJANG_OPTIONS.map((j) => ({
+          value: j.value,
+          code: j.label,
+          label: JENJANG_NAMES[j.value].replace(/^Madrasah /, ''),
+          chip: j.label,
+          title: `${JENJANG_NAMES[j.value]} (${j.label})`,
+          count: countOf(j.value),
+        })),
+        ...(lainnya
+          ? [
+              {
+                value: 'LAINNYA',
+                code: '',
+                label: SUB_LAINNYA_LABEL[tab],
+                chip: 'Lainnya',
+                title: 'Jenjang tidak bisa ditentukan dari nama satuan pendidikan',
+                count: lainnya,
+              },
+            ]
+          : []),
+      ];
+      return [tab, items];
+    })
+  ) as Record<SubTab, SubMenuItem[]>;
+  const openSub = (tab: SubTab, value: string) => goToTab(tab, value === 'ALL' ? {} : { jenjang: value });
   const pageTitle =
-    activeTab === 'kelembagaan' && filters.jenjang !== 'ALL'
-      ? `Kelembagaan • ${JENJANG_NAMES[filters.jenjang]}`
+    isSubTab(activeTab) && filters.jenjang !== 'ALL'
+      ? `${activeMenu?.label} • ${
+          filters.jenjang === 'LAINNYA' ? SUB_LAINNYA_LABEL[activeTab] : JENJANG_NAMES[filters.jenjang]
+        }`
       : activeMenu?.label;
   const userName = user.nama_lengkap || user.username;
   const initials = userName
@@ -788,13 +858,16 @@ export default function SimaduApp() {
           {sidebarMenus.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
-            const hasSub = item.id === 'kelembagaan';
+            const subItems = isSubTab(item.id) ? subMenus[item.id] : null;
+            const hasSub = Boolean(subItems);
+            // Submenu terbuka hanya untuk menu yang sedang aktif (sidebar tetap ringkas)
+            const subOpen = hasSub && isActive;
             return (
               <div key={item.id}>
                 <button
                   onClick={() => goToTab(item.id, hasSub ? {} : undefined)}
                   aria-current={isActive && !hasSub ? 'page' : undefined}
-                  aria-expanded={hasSub ? true : undefined}
+                  aria-expanded={hasSub ? subOpen : undefined}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold transition cursor-pointer ${
                     isActive
                       ? hasSub
@@ -805,32 +878,37 @@ export default function SimaduApp() {
                 >
                   <Icon className="w-[18px] h-[18px]" />
                   <span className="flex-1 text-left">{item.label}</span>
-                  {hasSub && <ChevronDown className="w-4 h-4 opacity-60" />}
+                  {hasSub &&
+                    (subOpen ? (
+                      <ChevronDown className="w-4 h-4 opacity-60" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 opacity-40" />
+                    ))}
                 </button>
 
-                {/* Submenu Kelembagaan: dibagi per jenjang */}
-                {hasSub && (
+                {/* Submenu per jenjang (Kelembagaan / Kesiswaan / GTK) */}
+                {subOpen && subItems && (
                   <ul className="mt-1 mb-2 ml-5 pl-2 border-l border-slate-200 space-y-0.5">
-                    {kelembagaanSub.map((sub) => {
-                      const subActive = activeTab === 'kelembagaan' && filtersByTab.kelembagaan.jenjang === sub.value;
+                    {subItems.map((sub) => {
+                      const subActive = filtersByTab[item.id as SubTab].jenjang === sub.value;
                       return (
                         <li key={sub.value}>
                           <button
-                            onClick={() => goToTab('kelembagaan', sub.value === 'ALL' ? {} : { jenjang: sub.value })}
+                            onClick={() => openSub(item.id as SubTab, sub.value)}
                             aria-current={subActive ? 'page' : undefined}
                             title={sub.title}
-                            className={`w-full flex items-center justify-between gap-2 pl-2.5 pr-2 py-2 rounded-lg text-[13px] transition cursor-pointer ${
+                            className={`w-full flex items-center justify-between gap-1.5 pl-2.5 pr-1.5 py-2 rounded-lg text-[13px] transition cursor-pointer ${
                               subActive
                                 ? 'bg-[#01533B] text-white font-semibold'
                                 : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
                             }`}
                           >
                             <span className="truncate">
-                              {sub.value !== 'ALL' && <span className="inline-block w-8 text-left font-bold">{sub.short}</span>}
+                              {sub.code && <span className="inline-block w-7 text-left font-bold">{sub.code}</span>}
                               {sub.label}
                             </span>
                             <span
-                              className={`shrink-0 text-[11px] font-semibold px-1.5 rounded ${
+                              className={`shrink-0 text-[11px] font-semibold px-1 rounded ${
                                 subActive ? 'bg-white/15 text-white' : 'text-slate-400'
                               }`}
                             >
@@ -950,19 +1028,19 @@ export default function SimaduApp() {
           })}
         </nav>
 
-        {activeTab === 'kelembagaan' && (
-          <nav aria-label="Jenjang lembaga" className="md:hidden flex items-center gap-2 overflow-x-auto px-4 py-2.5 bg-white border-b border-slate-200">
-            {kelembagaanSub.map((sub) => {
-              const subActive = filtersByTab.kelembagaan.jenjang === sub.value;
+        {isSubTab(activeTab) && (
+          <nav aria-label="Pilih jenjang" className="md:hidden flex items-center gap-2 overflow-x-auto px-4 py-2.5 bg-white border-b border-slate-200">
+            {subMenus[activeTab].map((sub) => {
+              const subActive = filtersByTab[activeTab].jenjang === sub.value;
               return (
                 <button
                   key={sub.value}
-                  onClick={() => goToTab('kelembagaan', sub.value === 'ALL' ? {} : { jenjang: sub.value })}
+                  onClick={() => openSub(activeTab, sub.value)}
                   className={`shrink-0 px-3 py-1 rounded-full text-xs font-semibold border transition ${
                     subActive ? 'bg-[#E8F2EE] border-[#01533B]/30 text-[#01533B]' : 'border-slate-200 text-slate-600'
                   }`}
                 >
-                  {sub.short}
+                  {sub.chip}
                   {sub.count !== null && <span className="ml-1 opacity-60">{fmt(sub.count)}</span>}
                 </button>
               );
@@ -1174,7 +1252,7 @@ export default function SimaduApp() {
                       </select>
                     )}
 
-                    {(activeTab === 'kelembagaan' || activeTab === 'kesiswaan') && (
+                    {isSubTab(activeTab) && (
                       <select
                         value={filters.jenjang}
                         onChange={(e) => updateFilters(activeTab, { jenjang: e.target.value })}
@@ -1187,6 +1265,9 @@ export default function SimaduApp() {
                             {j.label}
                           </option>
                         ))}
+                        {subMenus[activeTab].some((s) => s.value === 'LAINNYA') && (
+                          <option value="LAINNYA">{SUB_LAINNYA_LABEL[activeTab]}</option>
+                        )}
                       </select>
                     )}
 

@@ -21,6 +21,7 @@ const COLUMNS = {
     { header: 'NIP / NIK', key: 'nip_nik', width: 22 },
     { header: 'Status Kepegawaian', key: 'status_kepegawaian', width: 18 },
     { header: 'Status PTK', key: 'status_ptk', width: 22 },
+    { header: 'Jenjang', key: 'jenjang', width: 10 },
     { header: 'Jabatan', key: 'jabatan', width: 14 },
     { header: 'Satuan Pendidikan', key: 'nama_madrasah', width: 40 },
     { header: 'Tanggal Lahir', key: 'tanggal_lahir', width: 14 },

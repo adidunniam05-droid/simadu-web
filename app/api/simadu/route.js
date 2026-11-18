@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { readFilters, buildQuery, SISWA_JENJANG_SQL, GTK_STATUS_GROUPS } from '@/lib/simadu-query';
+import { readFilters, buildQuery, SISWA_JENJANG_SQL, GTK_JENJANG_SQL, GTK_STATUS_GROUPS } from '@/lib/simadu-query';
 
 const toInt = (value) => parseInt(value ?? 0, 10) || 0;
 
 async function getDashboard() {
-  const [resKec, resLembaga, resGtk, resSiswa, resSebaran, resJenjang, resSiswaJenjang] =
+  const [resKec, resLembaga, resGtk, resSiswa, resSebaran, resJenjang, resSiswaJenjang, resGtkJenjang] =
     await Promise.all([
       db.query(`
         SELECT DISTINCT ON (upper(trim(nama_kecamatan)))
@@ -52,10 +52,18 @@ async function getDashboard() {
         FROM kesiswaan
         GROUP BY 1
       `),
+      db.query(`
+        SELECT ${GTK_JENJANG_SQL} AS jenjang, COUNT(*) AS jumlah
+        FROM gtk
+        GROUP BY 1
+      `),
     ]);
 
-  const order = ['RA', 'MI', 'MTS', 'MA'];
+  const order = ['RA', 'MI', 'MTS', 'MA', 'LAINNYA'];
   const byOrder = (a, b) => order.indexOf(a.jenjang) - order.indexOf(b.jenjang);
+  // Jenjang NULL (tidak bisa ditentukan) dihitung sebagai LAINNYA.
+  const perJenjang = (rows) =>
+    rows.map((r) => ({ jenjang: r.jenjang || 'LAINNYA', jumlah: toInt(r.jumlah) })).sort(byOrder);
   const totalLembaga = toInt(resLembaga.rows[0].total);
   const gtk = resGtk.rows[0];
 
@@ -77,10 +85,8 @@ async function getDashboard() {
     sebaranJenjang: resJenjang.rows
       .map((r) => ({ jenjang: r.jenjang, jumlah: toInt(r.jumlah) }))
       .sort(byOrder),
-    siswaPerJenjang: resSiswaJenjang.rows
-      .filter((r) => r.jenjang)
-      .map((r) => ({ jenjang: r.jenjang, jumlah: toInt(r.jumlah) }))
-      .sort(byOrder),
+    siswaPerJenjang: perJenjang(resSiswaJenjang.rows),
+    gtkPerJenjang: perJenjang(resGtkJenjang.rows),
   };
 }
 
