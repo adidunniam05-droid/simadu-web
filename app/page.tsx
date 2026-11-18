@@ -185,8 +185,13 @@ function SimaduLogo({ className = 'h-11 w-auto' }: { className?: string }) {
   );
 }
 
-const SUPPORT_TEXT =
-  'Untuk pembuatan akun atau reset password, silakan hubungi Admin Penma Kantor Kementerian Agama Kabupaten Jember.';
+// Kontak Admin Penma lewat WhatsApp (08113656262 → format internasional 62...)
+const ADMIN_WA = '628113656262';
+const waLink = (message: string) => `https://wa.me/${ADMIN_WA}?text=${encodeURIComponent(message)}`;
+const WA_BANTUAN = waLink('Assalamualaikum Admin Penma, saya butuh bantuan terkait akun SIMADU.');
+const WA_LUPA_PASSWORD = waLink(
+  'Assalamualaikum Admin Penma, saya lupa password akun SIMADU. Mohon bantuan reset password.\nUsername: '
+);
 
 function Badge({ children, tone = 'slate' }: { children: React.ReactNode; tone?: string }) {
   const tones: Record<string, string> = {
@@ -303,7 +308,6 @@ export default function SimaduApp() {
   const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
-  const [showSupport, setShowSupport] = useState(false);
   const [showAllKec, setShowAllKec] = useState(false);
 
   // State Navigasi & Filter (filter disimpan terpisah per tab)
@@ -624,13 +628,15 @@ export default function SimaduApp() {
                       </button>
                     </div>
                     <div className="flex justify-end mt-2.5">
-                      <button
-                        type="button"
-                        onClick={() => setShowSupport((v) => !v)}
+                      <a
+                        href={WA_LUPA_PASSWORD}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Hubungi Admin Penma via WhatsApp (0811-3656-262)"
                         className="text-sm font-bold text-[#01533B] hover:underline underline-offset-4"
                       >
                         Lupa password?
-                      </button>
+                      </a>
                     </div>
                   </div>
 
@@ -644,21 +650,17 @@ export default function SimaduApp() {
                   </button>
                 </form>
 
-                {showSupport && (
-                  <div className="mt-5 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-900">
-                    {SUPPORT_TEXT}
-                  </div>
-                )}
-
                 <p className="mt-6 text-center text-sm text-slate-600">
                   Butuh bantuan?{' '}
-                  <button
-                    type="button"
-                    onClick={() => setShowSupport((v) => !v)}
+                  <a
+                    href={WA_BANTUAN}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="WhatsApp Admin Penma: 0811-3656-262"
                     className="font-bold text-[#01533B] hover:underline underline-offset-4"
                   >
                     Hubungi admin
-                  </button>
+                  </a>
                 </p>
               </div>
             </div>
