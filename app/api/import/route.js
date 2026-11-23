@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import ExcelJS from 'exceljs';
-import { getSessionUser, unauthorized } from '@/lib/session';
+import { forbidden, getSessionUser, unauthorized } from '@/lib/session';
+import { canImport } from '@/lib/roles';
 import { IMPORT_SCHEMAS, validateRecord } from '@/lib/import-schema';
 import {
   MAX_FILE_BYTES,
@@ -77,7 +78,9 @@ export async function GET(request) {
 //  - multipart: tab, file, commit=1 (tanpa commit = pratinjau saja)
 //  - JSON: { tab, record } untuk input manual satu data
 export async function POST(request) {
-  if (!(await getSessionUser())) return unauthorized();
+  const me = await getSessionUser();
+  if (!me) return unauthorized();
+  if (!canImport(me)) return forbidden('Peran Viewer hanya dapat melihat dan mengekspor data.');
 
   try {
     const contentType = request.headers.get('content-type') || '';

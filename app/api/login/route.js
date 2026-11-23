@@ -8,6 +8,7 @@ import {
   envAdminUser,
   hashPassword,
   isBcryptHash,
+  normalizeRole,
   passwordFingerprint,
 } from '@/lib/accounts';
 
@@ -79,7 +80,7 @@ export async function POST(request) {
     const user = {
       id: found.id,
       username: found.username,
-      role: found.role,
+      role: normalizeRole(found.role),
       nama_lengkap: found.nama_lengkap,
     };
     await createSession(user, passwordFingerprint(storedPassword));

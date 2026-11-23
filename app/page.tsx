@@ -5,6 +5,7 @@ import Image from 'next/image';
 import ImportModal from './import-modal';
 import AdminPanel from './admin-panel';
 import PasswordModal from './password-modal';
+import { canImport, canManageUsers } from '@/lib/roles';
 import {
   Eye,
   EyeOff,
@@ -135,7 +136,7 @@ const FIELD_LABELS: Record<string, string> = {
 };
 const SEARCH_DEBOUNCE_MS = 350;
 
-// Menu khusus Admin Pusat
+// Menu khusus Superadmin
 const ADMIN_MENU: { id: Tab; label: string; icon: typeof LayoutGrid } = {
   id: 'admin',
   label: 'Kelola Admin',
@@ -382,7 +383,8 @@ export default function SimaduApp() {
   const [sessionChecked, setSessionChecked] = useState(false);
 
   const isTableTab = (TABLE_TABS as string[]).includes(activeTab);
-  const isSuper = user?.role === 'Admin Pusat';
+  const isSuper = canManageUsers(user);
+  const mayImport = canImport(user);
   const menus = isSuper ? [...sidebarMenus, ADMIN_MENU] : sidebarMenus;
   const filters = isTableTab ? filtersByTab[activeTab as TableTab] : DEFAULT_FILTERS;
 
@@ -999,7 +1001,7 @@ export default function SimaduApp() {
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold text-slate-900 truncate">{userName}</div>
-              <div className="text-xs text-slate-500 truncate">{user.role || 'Admin Pusat'}</div>
+              <div className="text-xs text-slate-500 truncate">{user.role}</div>
             </div>
           </div>
           <button
@@ -1317,13 +1319,15 @@ export default function SimaduApp() {
                       {fmt(totalRecords)} data
                     </span>
                     {loadingData && <Loader2 className="w-4 h-4 text-[#01533B] animate-spin" aria-label="Memuat" />}
-                    <button
-                      onClick={() => setImportOpen(true)}
-                      title={`Tambah atau perbarui data ${activeMenu?.label} dari Excel / input manual`}
-                      className="ml-auto xl:ml-2 inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-[#01533B]/30 text-sm font-semibold text-[#01533B] hover:bg-[#E8F2EE] cursor-pointer"
-                    >
-                      <Upload className="w-4 h-4" /> Import
-                    </button>
+                    {mayImport && (
+                      <button
+                        onClick={() => setImportOpen(true)}
+                        title={`Tambah atau perbarui data ${activeMenu?.label} dari Excel / input manual`}
+                        className="ml-auto xl:ml-2 inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-[#01533B]/30 text-sm font-semibold text-[#01533B] hover:bg-[#E8F2EE] cursor-pointer"
+                      >
+                        <Upload className="w-4 h-4" /> Import
+                      </button>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 sm:flex sm:flex-wrap items-center gap-2">
@@ -1611,7 +1615,7 @@ export default function SimaduApp() {
       )}
 
       {/* Jendela Import (Upload File / Input Manual) */}
-      {importOpen && isTableTab && (
+      {importOpen && isTableTab && mayImport && (
         <ImportModal
           tab={activeTab as TableTab}
           kecamatanList={kecamatanList}

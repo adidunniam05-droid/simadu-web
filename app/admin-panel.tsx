@@ -15,6 +15,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import { ROLES as ROLE_LIST, ROLE_INFO } from '@/lib/roles';
 
 interface Account {
   id: number;
@@ -30,10 +31,12 @@ interface Me {
   role: string;
 }
 
-const ROLES = ['Admin Pusat', 'Admin'];
-const ROLE_NOTES: Record<string, string> = {
-  'Admin Pusat': 'Akses penuh: data, import, ekspor, dan kelola akun admin.',
-  Admin: 'Melihat, mengekspor, dan meng-import data. Tidak bisa mengelola akun.',
+const ROLES: string[] = ROLE_LIST;
+const ROLE_NOTES: Record<string, string> = ROLE_INFO;
+const ROLE_BADGE: Record<string, string> = {
+  Superadmin: 'bg-[#E8F2EE] text-[#01533B] ring-[#01533B]/15',
+  Admin: 'bg-sky-50 text-sky-800 ring-sky-600/20',
+  Viewer: 'bg-slate-50 text-slate-600 ring-slate-500/20',
 };
 
 /** Password acak mudah dibaca (tanpa karakter mirip seperti 0/O, 1/l). */
@@ -324,9 +327,7 @@ export default function AdminPanel({ me, onSessionExpired }: { me: Me; onSession
                     <td className="py-3 px-3">
                       <span
                         className={`inline-block px-2 py-0.5 rounded-md text-xs font-semibold ring-1 ring-inset ${
-                          a.role === 'Admin Pusat'
-                            ? 'bg-[#E8F2EE] text-[#01533B] ring-[#01533B]/15'
-                            : 'bg-slate-50 text-slate-600 ring-slate-500/20'
+                          ROLE_BADGE[a.role] ?? ROLE_BADGE.Viewer
                         }`}
                       >
                         {a.role}
@@ -373,7 +374,7 @@ export default function AdminPanel({ me, onSessionExpired }: { me: Me; onSession
 
       <section className={`${card} p-5`}>
         <h3 className="text-sm font-bold text-slate-900 mb-2">Hak akses per peran</h3>
-        <dl className="grid sm:grid-cols-2 gap-3 text-sm">
+        <dl className="grid sm:grid-cols-3 gap-3 text-sm">
           {ROLES.map((r) => (
             <div key={r} className="rounded-lg bg-slate-50 px-4 py-3">
               <dt className="font-semibold text-slate-900">{r}</dt>

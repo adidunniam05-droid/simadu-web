@@ -5,12 +5,16 @@ import {
   SUPER_ROLE,
   hashPassword,
   isBcryptHash,
-  isSuperAdmin,
+  canManageUsers,
+  normalizeRole,
+  roleAliases,
+  ROLES,
   passwordFingerprint,
   validateAccount,
 } from '@/lib/accounts';
 
-// Kelola akun admin (tabel users). Hanya untuk peran Admin Pusat.
+// Kelola akun admin (tabel users). Hanya untuk Superadmin.
+const SUPER_NAMES = roleAliases(SUPER_ROLE); // termasuk nama lama "Admin Pusat"
 
 const bad = (message, status = 400, extra = {}) => NextResponse.json({ error: message, ...extra }, { status });
 const clean = (v) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : undefined);
@@ -18,17 +22,18 @@ const clean = (v) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : un
 async function requireSuper() {
   const me = await getSessionUser();
   if (!me) return { res: unauthorized() };
-  if (!isSuperAdmin(me)) return { res: forbidden('Hanya Admin Pusat yang dapat mengelola akun admin.') };
+  if (!canManageUsers(me)) return { res: forbidden('Hanya Superadmin yang dapat mengelola akun admin.') };
   return { me };
 }
 
 const listUsers = async () => {
   const { rows } = await db.query(
-    'SELECT id, username, nama_lengkap, role, password FROM users ORDER BY (role = $1) DESC, lower(nama_lengkap), id',
-    [SUPER_ROLE]
+    'SELECT id, username, nama_lengkap, role, password FROM users ORDER BY lower(nama_lengkap), id'
   );
   // Password tidak pernah dikirim; hanya penanda apakah sudah terenkripsi.
-  return rows.map(({ password, ...u }) => ({ ...u, password_terenkripsi: isBcryptHash(password) }));
+  return rows
+    .map(({ password, ...u }) => ({ ...u, role: normalizeRole(u.role), password_terenkripsi: isBcryptHash(password) }))
+    .sort((a, b) => ROLES.indexOf(a.role) - ROLES.indexOf(b.role));
 };
 
 const usernameTaken = async (username, exceptId = null) => {
@@ -92,15 +97,15 @@ export async function PATCH(request) {
     if (data.username && (await usernameTaken(data.username, id))) return bad('Username sudah dipakai akun lain.', 409);
 
     const result = await db.transaction(async (client) => {
-      // Kunci baris Admin Pusat agar pemeriksaan "admin terakhir" tidak bentrok
-      const { rows: supers } = await client.query('SELECT id FROM users WHERE role = $1 FOR UPDATE', [SUPER_ROLE]);
+      // Kunci baris Superadmin agar pemeriksaan "Superadmin terakhir" tidak bentrok
+      const { rows: supers } = await client.query('SELECT id FROM users WHERE role = ANY($1) FOR UPDATE', [SUPER_NAMES]);
       const { rows } = await client.query('SELECT id, role FROM users WHERE id = $1 FOR UPDATE', [id]);
       const target = rows[0];
       if (!target) return { error: bad('Akun tidak ditemukan.', 404) };
 
-      if (data.role && data.role !== SUPER_ROLE && target.role === SUPER_ROLE) {
+      if (data.role && data.role !== SUPER_ROLE && normalizeRole(target.role) === SUPER_ROLE) {
         if (String(target.id) === String(me.id)) return { error: bad('Anda tidak dapat menurunkan peran akun Anda sendiri.') };
-        if (supers.length <= 1) return { error: bad('Harus tetap ada minimal satu Admin Pusat.') };
+        if (supers.length <= 1) return { error: bad('Harus tetap ada minimal satu Superadmin.') };
       }
 
       const sets = [];
@@ -143,11 +148,11 @@ export async function DELETE(request) {
     if (String(id) === String(me.id)) return bad('Anda tidak dapat menghapus akun Anda sendiri.');
 
     const result = await db.transaction(async (client) => {
-      const { rows: supers } = await client.query('SELECT id FROM users WHERE role = $1 FOR UPDATE', [SUPER_ROLE]);
+      const { rows: supers } = await client.query('SELECT id FROM users WHERE role = ANY($1) FOR UPDATE', [SUPER_NAMES]);
       const { rows } = await client.query('SELECT id, role FROM users WHERE id = $1 FOR UPDATE', [id]);
       if (!rows[0]) return { error: bad('Akun tidak ditemukan.', 404) };
-      if (rows[0].role === SUPER_ROLE && supers.length <= 1) {
-        return { error: bad('Harus tetap ada minimal satu Admin Pusat.') };
+      if (normalizeRole(rows[0].role) === SUPER_ROLE && supers.length <= 1) {
+        return { error: bad('Harus tetap ada minimal satu Superadmin.') };
       }
       await client.query('DELETE FROM users WHERE id = $1', [id]);
       return {};
