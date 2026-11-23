@@ -3,11 +3,15 @@ import { timingSafeEqual } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { db } from '@/lib/db';
 import { createSession } from '@/lib/session';
+import {
+  envAdminFingerprint,
+  envAdminUser,
+  hashPassword,
+  isBcryptHash,
+  passwordFingerprint,
+} from '@/lib/accounts';
 
-const BCRYPT_ROUNDS = 10;
 const INVALID_LOGIN = { error: 'Username atau Password salah!' };
-
-const isBcryptHash = (value) => /^\$2[aby]\$\d{2}\$/.test(value || '');
 
 const safeEqual = (a, b) => {
   const bufA = Buffer.from(String(a));
@@ -18,16 +22,12 @@ const safeEqual = (a, b) => {
 // Akun admin dari environment variable (ADMIN_USERNAME + ADMIN_PASSWORD).
 // Aktif hanya jika keduanya diisi; akun di tabel users tetap berlaku.
 const matchEnvAdmin = (username, password) => {
-  const envUser = process.env.ADMIN_USERNAME;
-  const envPass = process.env.ADMIN_PASSWORD;
-  if (!envUser || !envPass) return null;
-  if (!safeEqual(username, envUser) || !safeEqual(password, envPass)) return null;
-  return {
-    id: 'env-admin',
-    username: envUser,
-    role: process.env.ADMIN_ROLE || 'Admin Pusat',
-    nama_lengkap: process.env.ADMIN_NAMA || envUser,
-  };
+  const envUser = envAdminUser();
+  if (!envUser) return null;
+  if (!safeEqual(username, process.env.ADMIN_USERNAME) || !safeEqual(password, process.env.ADMIN_PASSWORD)) {
+    return null;
+  }
+  return envUser;
 };
 
 export async function POST(request) {
@@ -40,7 +40,7 @@ export async function POST(request) {
 
     const envAdmin = matchEnvAdmin(username, password);
     if (envAdmin) {
-      await createSession(envAdmin);
+      await createSession(envAdmin, envAdminFingerprint());
       return NextResponse.json({ user: envAdmin });
     }
 
@@ -55,6 +55,7 @@ export async function POST(request) {
     }
 
     let valid = false;
+    let storedPassword = found.password;
     if (isBcryptHash(found.password)) {
       valid = await bcrypt.compare(password, found.password);
     } else {
@@ -62,8 +63,9 @@ export async function POST(request) {
       valid = found.password === password;
       if (valid) {
         try {
-          const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+          const hash = await hashPassword(password);
           await db.query('UPDATE users SET password = $1 WHERE id = $2', [hash, found.id]);
+          storedPassword = hash;
         } catch (upgradeError) {
           console.error('Gagal mengubah password ke hash:', upgradeError.message);
         }
@@ -80,9 +82,10 @@ export async function POST(request) {
       role: found.role,
       nama_lengkap: found.nama_lengkap,
     };
-    await createSession(user);
+    await createSession(user, passwordFingerprint(storedPassword));
     return NextResponse.json({ user });
   } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('API login error:', error);
+    return NextResponse.json({ error: 'Gagal memproses login.' }, { status: 500 });
   }
 }

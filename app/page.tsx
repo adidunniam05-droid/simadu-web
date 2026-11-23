@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Image from 'next/image';
 import ImportModal from './import-modal';
+import AdminPanel from './admin-panel';
+import PasswordModal from './password-modal';
 import {
   Eye,
   EyeOff,
@@ -21,6 +23,8 @@ import {
   ChevronUp,
   ChevronDown,
   ChevronsUpDown,
+  KeyRound,
+  UserCog,
   X,
   AlertCircle,
   RotateCcw,
@@ -60,7 +64,7 @@ interface FilterOptions {
 }
 
 type TableTab = 'kelembagaan' | 'kesiswaan' | 'gtk' | 'berkas_sk';
-type Tab = 'dashboard' | TableTab;
+type Tab = 'dashboard' | TableTab | 'admin';
 type Row = Record<string, unknown>;
 
 interface Filters {
@@ -131,6 +135,13 @@ const FIELD_LABELS: Record<string, string> = {
 };
 const SEARCH_DEBOUNCE_MS = 350;
 
+// Menu khusus Admin Pusat
+const ADMIN_MENU: { id: Tab; label: string; icon: typeof LayoutGrid } = {
+  id: 'admin',
+  label: 'Kelola Admin',
+  icon: UserCog,
+};
+
 const sidebarMenus: { id: Tab; label: string; icon: typeof LayoutGrid }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
   { id: 'kelembagaan', label: 'Kelembagaan', icon: Building2 },
@@ -194,6 +205,7 @@ const SEARCH_PLACEHOLDER: Record<Tab, string> = {
   kesiswaan: 'Cari nama, NISN, NIK...',
   gtk: 'Cari nama atau NIP/NIK...',
   berkas_sk: 'Cari judul atau nomor SK...',
+  admin: '',
 };
 
 const fmt = (n: number) => n.toLocaleString('id-ID');
@@ -363,12 +375,15 @@ export default function SimaduApp() {
     dir: 'asc',
   });
   const [importOpen, setImportOpen] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
   // Naik setiap kali data berubah (import) → tabel & dashboard dimuat ulang
   const [dataVersion, setDataVersion] = useState(0);
   // false sampai pengecekan sesi login (cookie) selesai
   const [sessionChecked, setSessionChecked] = useState(false);
 
-  const isTableTab = activeTab !== 'dashboard';
+  const isTableTab = (TABLE_TABS as string[]).includes(activeTab);
+  const isSuper = user?.role === 'Admin Pusat';
+  const menus = isSuper ? [...sidebarMenus, ADMIN_MENU] : sidebarMenus;
   const filters = isTableTab ? filtersByTab[activeTab as TableTab] : DEFAULT_FILTERS;
 
   // Fungsi Login ke /api/login
@@ -409,6 +424,7 @@ export default function SimaduApp() {
     setTotalRecords(0);
     setSelectedDetail(null);
     setImportOpen(false);
+    setPasswordOpen(false);
   }, []);
 
   const handleLogout = async () => {
@@ -446,11 +462,12 @@ export default function SimaduApp() {
   // Pindah tab; opsional sekaligus mengganti filter tab tujuan (mis. klik grafik dashboard).
   const goToTab = useCallback(
     (tab: Tab, patch?: Partial<Filters>) => {
-      if (tab !== 'dashboard' && patch) {
+      const toTable = (TABLE_TABS as string[]).includes(tab);
+      if (toTable && patch) {
         setFiltersByTab((prev) => ({ ...prev, [tab]: { ...DEFAULT_FILTERS, ...patch } }));
       }
       setActiveTab(tab);
-      setSearchDraft(tab === 'dashboard' ? '' : (patch?.search ?? filtersByTab[tab as TableTab].search));
+      setSearchDraft(toTable ? (patch?.search ?? filtersByTab[tab as TableTab].search) : '');
     },
     [filtersByTab]
   );
@@ -473,6 +490,7 @@ export default function SimaduApp() {
       const t = setTimeout(() => goToTab('kelembagaan', { search: term }), SEARCH_DEBOUNCE_MS);
       return () => clearTimeout(t);
     }
+    if (activeTab === 'admin') return;
     if (term === filtersByTab[activeTab].search) return;
     const t = setTimeout(() => updateFilters(activeTab, { search: term }), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(t);
@@ -782,7 +800,7 @@ export default function SimaduApp() {
   const totalPages = Math.max(Math.ceil(totalRecords / filters.pageSize), 1);
   const firstRow = totalRecords === 0 ? 0 : (filters.page - 1) * filters.pageSize + 1;
   const lastRow = Math.min(filters.page * filters.pageSize, totalRecords);
-  const activeMenu = sidebarMenus.find((m) => m.id === activeTab);
+  const activeMenu = menus.find((m) => m.id === activeTab);
   // Isi submenu per jenjang (+ jumlah) untuk Kelembagaan, Kesiswaan, GTK
   const subCounts: Record<SubTab, JenjangCount[]> = {
     kelembagaan: sebaranJenjang,
@@ -904,7 +922,7 @@ export default function SimaduApp() {
 
         <nav className="flex-1 px-3 py-5 space-y-1 overflow-y-auto">
           <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Menu</p>
-          {sidebarMenus.map((item) => {
+          {menus.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             const subItems = isSubTab(item.id) ? subMenus[item.id] : null;
@@ -985,8 +1003,15 @@ export default function SimaduApp() {
             </div>
           </div>
           <button
+            onClick={() => setPasswordOpen(true)}
+            className="mt-1 w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+          >
+            <KeyRound className="w-4 h-4" />
+            <span>Ganti Password</span>
+          </button>
+          <button
             onClick={handleLogout}
-            className="mt-1 w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-rose-600 hover:bg-rose-50 transition cursor-pointer"
           >
             <LogOut className="w-4 h-4" />
             <span>Keluar Akun</span>
@@ -1000,6 +1025,14 @@ export default function SimaduApp() {
         <header className="bg-white border-b border-slate-200 px-4 sm:px-6 lg:px-8 py-4 lg:h-20 flex flex-col lg:flex-row lg:items-center gap-3 lg:gap-6">
           <div className="flex items-center justify-between gap-3 md:hidden">
             <SimaduLogo className="h-9 w-auto" />
+            <button
+              onClick={() => setPasswordOpen(true)}
+              className="ml-auto inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-600 border border-slate-200"
+              aria-label="Ganti password"
+              title="Ganti password"
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+            </button>
             <button
               onClick={handleLogout}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-rose-600 border border-rose-200"
@@ -1017,7 +1050,7 @@ export default function SimaduApp() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className={`flex items-center gap-2.5 ${activeTab === 'admin' ? 'hidden' : ''}`}>
             <div className="relative flex-1 lg:w-80 lg:flex-none">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
@@ -1059,7 +1092,7 @@ export default function SimaduApp() {
 
         {/* Navigasi ponsel (sidebar disembunyikan di layar kecil) */}
         <nav className="md:hidden flex items-center gap-2 overflow-x-auto px-4 py-3 bg-white border-b border-slate-200">
-          {sidebarMenus.map((item) => {
+          {menus.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (
@@ -1270,6 +1303,8 @@ export default function SimaduApp() {
                 </div>
               </section>
             </>
+          ) : activeTab === 'admin' ? (
+            <AdminPanel me={user} onSessionExpired={expireSession} />
           ) : (
             /* TAB 2-5: TABEL DATA (KELEMBAGAAN / KESISWAAN / GTK / BERKAS SK) */
             <section className={`${card} overflow-hidden`}>
@@ -1565,6 +1600,15 @@ export default function SimaduApp() {
           © 2026 Kementerian Agama Kabupaten Jember • SIMADU
         </footer>
       </main>
+
+      {/* Ganti password akun sendiri */}
+      {passwordOpen && (
+        <PasswordModal
+          isEnvAdmin={user.id === 'env-admin'}
+          onClose={() => setPasswordOpen(false)}
+          onSessionExpired={expireSession}
+        />
+      )}
 
       {/* Jendela Import (Upload File / Input Manual) */}
       {importOpen && isTableTab && (
