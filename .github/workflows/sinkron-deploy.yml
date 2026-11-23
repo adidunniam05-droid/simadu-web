@@ -1,0 +1,97 @@
+# Sinkron & deploy SIMADU dari repo adidunniam05-droid.
+#
+# Project Vercel tersambung ke repo kemenagjember-rgb/simadu-web, dan Vercel
+# (paket Hobby) memblokir deploy otomatis untuk commit dari akun lain.
+# Workflow ini membuat commit di repo adidunniam05-droid tetap langsung live:
+#   1. salin commit ke repo kemenagjember-rgb (push biasa, tanpa --force)
+#   2. deploy ke Vercel atas nama akun Kemenag Jember (pakai token)
+#
+# Secret yang wajib diisi di repo adidunniam05-droid/simadu-web
+# (Settings → Secrets and variables → Actions):
+#   - SYNC_TOKEN   : token GitHub akun kemenagjember-rgb, izin Contents: Read & write
+#                    untuk repo simadu-web
+#   - VERCEL_TOKEN : token Vercel akun Kemenag Jember (Account Settings → Tokens)
+
+name: Sinkron & Deploy SIMADU
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: simadu-production
+  cancel-in-progress: false
+
+env:
+  TARGET_REPO: kemenagjember-rgb/simadu-web
+  # ID team & project Vercel (bukan rahasia)
+  VERCEL_ORG_ID: team_3LKMB3uKqOXTV3C01CekQuDh
+  VERCEL_PROJECT_ID: prj_IEjGKtlrWo5yIWsE1CeGyGfgqxaz
+
+jobs:
+  sinkron-deploy:
+    # Hanya berjalan di repo adidunniam05-droid; repo kemenagjember-rgb
+    # sudah dideploy otomatis oleh Vercel.
+    if: github.repository == 'adidunniam05-droid/simadu-web'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Periksa secret
+        id: secrets
+        env:
+          SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          missing=""
+          [ -n "$SYNC_TOKEN" ] || missing="$missing SYNC_TOKEN"
+          [ -n "$VERCEL_TOKEN" ] || missing="$missing VERCEL_TOKEN"
+          if [ -n "$missing" ]; then
+            # Belum disiapkan: lewati tanpa gagal, beri peringatan
+            echo "::warning::Sinkron & deploy dilewati. Secret belum diisi:$missing (Settings → Secrets and variables → Actions)"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.secrets.outputs.ready == 'true'
+        with:
+          fetch-depth: 0
+
+      - name: Salin commit ke repo kemenagjember-rgb
+        id: sync
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
+        run: |
+          url="https://x-access-token:${SYNC_TOKEN}@github.com/${TARGET_REPO}.git"
+          remote_sha=$(git ls-remote "$url" refs/heads/main | cut -f1)
+          if [ "$remote_sha" = "$GITHUB_SHA" ]; then
+            echo "Commit ini sudah ada di ${TARGET_REPO}; Vercel men-deploy-nya sendiri."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! git push "$url" "HEAD:refs/heads/main"; then
+            echo "::error::Repo ${TARGET_REPO} punya commit yang belum ada di sini. Tarik dulu perubahannya (git pull), lalu push ulang. Tidak ada yang di-deploy."
+            exit 1
+          fi
+          echo "deploy=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        if: steps.sync.outputs.deploy == 'true'
+        with:
+          node-version: 24
+
+      - name: Deploy ke Vercel (production)
+        if: steps.sync.outputs.deploy == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          npm install --global vercel@latest
+          vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          vercel build --prod --token="$VERCEL_TOKEN"
+          url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
+          echo "Live: $url"
+          echo "### SIMADU sudah live :rocket:" >> "$GITHUB_STEP_SUMMARY"
+          echo "Deploy: $url" >> "$GITHUB_STEP_SUMMARY"
