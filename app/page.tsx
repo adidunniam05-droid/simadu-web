@@ -62,6 +62,8 @@ interface DashboardData {
 interface FilterOptions {
   statusPtk: { value: string; jumlah: number }[];
   kategoriSk: string[];
+  pengawas: { value: string; jumlah: number }[];
+  tanpaPengawas: number;
 }
 
 type TableTab = 'kelembagaan' | 'kesiswaan' | 'gtk' | 'berkas_sk';
@@ -75,6 +77,7 @@ interface Filters {
   status: string;
   ptk: string;
   kategori: string;
+  pengawas: string;
   sort: string;
   dir: 'asc' | 'desc' | '';
   page: number;
@@ -88,6 +91,7 @@ const DEFAULT_FILTERS: Filters = {
   status: 'ALL',
   ptk: 'ALL',
   kategori: 'ALL',
+  pengawas: 'ALL',
   sort: '',
   dir: '',
   page: 1,
@@ -133,6 +137,8 @@ const FIELD_LABELS: Record<string, string> = {
   tanggal_terbit: 'Tanggal terbit',
   format_file: 'Format',
   link_google_drive: 'Tautan berkas',
+  nama_pengawas: 'Nama pengawas',
+  nip_pengawas: 'NIP pengawas',
 };
 const SEARCH_DEBOUNCE_MS = 350;
 
@@ -202,7 +208,7 @@ const GTK_STATUS_OPTIONS = [
 
 const SEARCH_PLACEHOLDER: Record<Tab, string> = {
   dashboard: 'Cari madrasah, NSM, NPSN...',
-  kelembagaan: 'Cari nama, NSM, NPSN...',
+  kelembagaan: 'Cari nama, NSM, pengawas...',
   kesiswaan: 'Cari nama, NISN, NIK...',
   gtk: 'Cari nama atau NIP/NIK...',
   berkas_sk: 'Cari judul atau nomor SK...',
@@ -285,6 +291,19 @@ const COLUMNS: Record<TableTab, Column[]> = {
     { label: 'Jenjang', sort: 'jenjang', render: (r) => <Badge tone="emerald">{jenjangLabel(r.jenjang)}</Badge> },
     { label: 'Kecamatan', sort: 'kecamatan', render: (r) => text(r.kecamatan) },
     { label: 'Kepala Madrasah', sort: 'kepala', render: (r) => text(r.kepala_madrasah) },
+    {
+      label: 'Pengawas',
+      sort: 'pengawas',
+      render: (r) =>
+        r.nama_pengawas ? (
+          <span className="block leading-tight">
+            <span className="block">{text(r.nama_pengawas)}</span>
+            {r.nip_pengawas ? <span className="block font-mono text-[11px] text-slate-400">{text(r.nip_pengawas)}</span> : null}
+          </span>
+        ) : (
+          <span className="text-xs text-slate-400">Belum ada</span>
+        ),
+    },
   ],
   kesiswaan: [
     { label: 'NISN', sort: 'nisn', className: 'font-mono text-xs', render: (r) => text(r.nisn) },
@@ -531,6 +550,7 @@ export default function SimaduApp() {
     if (f.status !== 'ALL') p.set('status', f.status);
     if (f.ptk !== 'ALL') p.set('ptk', f.ptk);
     if (f.kategori !== 'ALL') p.set('kategori', f.kategori);
+    if (f.pengawas !== 'ALL') p.set('pengawas', f.pengawas);
     if (f.sort) p.set('sort', f.sort);
     if (f.dir) p.set('dir', f.dir);
     return p.toString();
@@ -878,6 +898,11 @@ export default function SimaduApp() {
     if (filters.ptk !== 'ALL') activeChips.push({ label: `Status PTK: ${filters.ptk}`, clear: { ptk: 'ALL' } });
     if (filters.kategori !== 'ALL')
       activeChips.push({ label: `Kategori: ${filters.kategori}`, clear: { kategori: 'ALL' } });
+    if (filters.pengawas !== 'ALL')
+      activeChips.push({
+        label: filters.pengawas === 'BELUM' ? 'Belum ada pengawas' : `Pengawas: ${filters.pengawas}`,
+        clear: { pengawas: 'ALL' },
+      });
   }
 
   const card = 'bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)]';
@@ -1342,6 +1367,25 @@ export default function SimaduApp() {
                         {kecamatanList.map((k) => (
                           <option key={k.kode_kecamatan} value={k.nama_kecamatan.toUpperCase()}>
                             {k.nama_kecamatan}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    {activeTab === 'kelembagaan' && (
+                      <select
+                        value={filters.pengawas}
+                        onChange={(e) => updateFilters('kelembagaan', { pengawas: e.target.value })}
+                        className={selectClass}
+                        aria-label="Filter pengawas"
+                      >
+                        <option value="ALL">Semua pengawas</option>
+                        {(options?.tanpaPengawas ?? 0) > 0 && (
+                          <option value="BELUM">Belum ada pengawas ({fmt(options?.tanpaPengawas ?? 0)})</option>
+                        )}
+                        {(options?.pengawas ?? []).map((p) => (
+                          <option key={p.value} value={p.value}>
+                            {p.value} ({fmt(p.jumlah)})
                           </option>
                         ))}
                       </select>

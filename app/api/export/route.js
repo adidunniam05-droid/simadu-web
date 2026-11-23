@@ -16,6 +16,8 @@ const COLUMNS = {
     { header: 'Kecamatan', key: 'kecamatan', width: 18 },
     { header: 'Kepala Madrasah', key: 'kepala_madrasah', width: 32 },
     { header: 'Status', key: 'status_aktif', width: 14 },
+    { header: 'Nama Pengawas', key: 'nama_pengawas', width: 32 },
+    { header: 'NIP Pengawas', key: 'nip_pengawas', width: 22 },
   ],
   gtk: [
     // ID GTK = kunci pencocokan saat file ini di-import ulang

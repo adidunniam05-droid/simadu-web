@@ -92,7 +92,7 @@ async function getDashboard() {
 }
 
 async function getOptions() {
-  const [ptk, kategori] = await Promise.all([
+  const [ptk, kategori, pengawas] = await Promise.all([
     db.query(`
       SELECT trim(status_ptk) AS value, COUNT(*) AS jumlah
       FROM gtk
@@ -106,10 +106,19 @@ async function getOptions() {
       WHERE nullif(trim(kategori_utama), '') IS NOT NULL
       ORDER BY 1
     `),
+    // Pengawas + jumlah madrasah binaannya; baris NULL = belum ada pengawas
+    db.query(`
+      SELECT min(trim(nama_pengawas)) AS value, COUNT(*) AS jumlah
+      FROM kelembagaan
+      GROUP BY upper(trim(nullif(nama_pengawas, '')))
+      ORDER BY 1 NULLS LAST
+    `),
   ]);
   return {
     statusPtk: ptk.rows.map((r) => ({ value: r.value, jumlah: toInt(r.jumlah) })),
     kategoriSk: kategori.rows.map((r) => r.value),
+    pengawas: pengawas.rows.filter((r) => r.value).map((r) => ({ value: r.value, jumlah: toInt(r.jumlah) })),
+    tanpaPengawas: toInt(pengawas.rows.find((r) => !r.value)?.jumlah),
   };
 }
 
