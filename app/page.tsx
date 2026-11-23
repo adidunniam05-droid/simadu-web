@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Image from 'next/image';
+import ImportModal from './import-modal';
 import {
   Eye,
   EyeOff,
@@ -23,6 +24,7 @@ import {
   X,
   AlertCircle,
   RotateCcw,
+  Upload,
   Loader2,
 } from 'lucide-react';
 
@@ -360,6 +362,11 @@ export default function SimaduApp() {
     sort: '',
     dir: 'asc',
   });
+  const [importOpen, setImportOpen] = useState(false);
+  // Naik setiap kali data berubah (import) → tabel & dashboard dimuat ulang
+  const [dataVersion, setDataVersion] = useState(0);
+  // false sampai pengecekan sesi login (cookie) selesai
+  const [sessionChecked, setSessionChecked] = useState(false);
 
   const isTableTab = activeTab !== 'dashboard';
   const filters = isTableTab ? filtersByTab[activeTab as TableTab] : DEFAULT_FILTERS;
@@ -392,7 +399,7 @@ export default function SimaduApp() {
     }
   };
 
-  const handleLogout = () => {
+  const resetState = useCallback(() => {
     setUser(null);
     setActiveTab('dashboard');
     setFiltersByTab(initialFilters());
@@ -401,7 +408,32 @@ export default function SimaduApp() {
     setTableRows([]);
     setTotalRecords(0);
     setSelectedDetail(null);
+    setImportOpen(false);
+  }, []);
+
+  const handleLogout = async () => {
+    await fetch('/api/logout', { method: 'POST' }).catch(() => {});
+    resetState();
   };
+
+  // Server menolak (401): sesi habis → kembali ke halaman login dengan pesan.
+  const expireSession = useCallback(() => {
+    resetState();
+    setLoginError('Sesi berakhir. Silakan masuk kembali.');
+  }, [resetState]);
+
+  // Saat halaman dibuka/dimuat ulang: pulihkan login dari cookie sesi.
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/session');
+        if (res.ok) setUser((await res.json()).user);
+      } catch {
+        // abaikan: tampilkan halaman login
+      }
+      setSessionChecked(true);
+    })();
+  }, []);
 
   // Ubah filter satu tab. Selain pindah halaman, perubahan filter mengembalikan ke halaman 1.
   const updateFilters = useCallback((tab: TableTab, patch: Partial<Filters>) => {
@@ -456,6 +488,7 @@ export default function SimaduApp() {
           fetch('/api/simadu?tab=dashboard', { signal: controller.signal }),
           fetch('/api/simadu?tab=options', { signal: controller.signal }),
         ]);
+        if (dashRes.status === 401) return expireSession();
         if (dashRes.ok) setDashboardData(await dashRes.json());
         else setDataError('Gagal memuat ringkasan dashboard.');
         if (optRes.ok) setOptions(await optRes.json());
@@ -464,7 +497,7 @@ export default function SimaduApp() {
       }
     })();
     return () => controller.abort();
-  }, [user]);
+  }, [user, dataVersion, expireSession]);
 
   // Data tabel. Request lama dibatalkan bila filter berubah sebelum selesai,
   // sehingga hasil yang tampil selalu milik filter terakhir.
@@ -484,7 +517,9 @@ export default function SimaduApp() {
   }, [isTableTab, activeTab, filtersByTab]);
 
   // "Sedang memuat" = permintaan yang diminta belum sama dengan yang terakhir selesai.
-  const requestKey = isTableTab ? `${queryString}&page=${filters.page}&limit=${filters.pageSize}` : '';
+  const requestKey = isTableTab
+    ? `${queryString}&page=${filters.page}&limit=${filters.pageSize}&v=${dataVersion}`
+    : '';
   const [loadedKey, setLoadedKey] = useState('');
   const loadingData = isTableTab && loadedKey !== requestKey;
 
@@ -494,6 +529,7 @@ export default function SimaduApp() {
     (async () => {
       try {
         const res = await fetch(`/api/simadu?${requestKey}`, { signal: controller.signal });
+        if (res.status === 401) return expireSession();
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Gagal memuat data.');
         setTableRows(data.rows || []);
@@ -510,7 +546,7 @@ export default function SimaduApp() {
       setLoadedKey(requestKey);
     })();
     return () => controller.abort();
-  }, [user, requestKey]);
+  }, [user, requestKey, expireSession]);
 
   const currentSort = filters.sort || appliedSort.sort;
   const currentDir = filters.dir || appliedSort.dir;
@@ -541,6 +577,7 @@ export default function SimaduApp() {
     try {
       const qs = isTableTab ? queryString : `tab=${tab}`;
       const res = await fetch(`/api/export?${qs}`);
+      if (res.status === 401) return expireSession();
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Gagal membuat file Excel.');
@@ -563,6 +600,18 @@ export default function SimaduApp() {
       setExporting(false);
     }
   };
+
+  // Sambil memeriksa sesi login: layar polos dengan logo (hindari kedipan halaman login)
+  if (!sessionChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="flex flex-col items-center gap-4">
+          <SimaduLogo className="h-12 w-auto" />
+          <Loader2 className="w-5 h-5 text-[#01533B] animate-spin" aria-label="Memuat" />
+        </div>
+      </div>
+    );
+  }
 
   // =========================================================
   // TAMPILAN 1: HALAMAN LOGIN (panel hijau + formulir)
@@ -1233,6 +1282,13 @@ export default function SimaduApp() {
                       {fmt(totalRecords)} data
                     </span>
                     {loadingData && <Loader2 className="w-4 h-4 text-[#01533B] animate-spin" aria-label="Memuat" />}
+                    <button
+                      onClick={() => setImportOpen(true)}
+                      title={`Tambah atau perbarui data ${activeMenu?.label} dari Excel / input manual`}
+                      className="ml-auto xl:ml-2 inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-[#01533B]/30 text-sm font-semibold text-[#01533B] hover:bg-[#E8F2EE] cursor-pointer"
+                    >
+                      <Upload className="w-4 h-4" /> Import
+                    </button>
                   </div>
 
                   <div className="grid grid-cols-1 sm:flex sm:flex-wrap items-center gap-2">
@@ -1509,6 +1565,17 @@ export default function SimaduApp() {
           © 2026 Kementerian Agama Kabupaten Jember • SIMADU
         </footer>
       </main>
+
+      {/* Jendela Import (Upload File / Input Manual) */}
+      {importOpen && isTableTab && (
+        <ImportModal
+          tab={activeTab as TableTab}
+          kecamatanList={kecamatanList}
+          onClose={() => setImportOpen(false)}
+          onImported={() => setDataVersion((v) => v + 1)}
+          onSessionExpired={expireSession}
+        />
+      )}
 
       {/* Modal Detail Record */}
       {selectedDetail && (

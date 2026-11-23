@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { getSessionUser, unauthorized } from '@/lib/session';
 import { readFilters, buildQuery, SISWA_JENJANG_SQL, GTK_JENJANG_SQL, GTK_STATUS_GROUPS } from '@/lib/simadu-query';
 
 const toInt = (value) => parseInt(value ?? 0, 10) || 0;
@@ -113,6 +114,7 @@ async function getOptions() {
 }
 
 export async function GET(request) {
+  if (!(await getSessionUser())) return unauthorized();
   const { searchParams } = new URL(request.url);
   const filters = readFilters(searchParams);
 

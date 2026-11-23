@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { timingSafeEqual } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { db } from '@/lib/db';
+import { createSession } from '@/lib/session';
 
 const BCRYPT_ROUNDS = 10;
 const INVALID_LOGIN = { error: 'Username atau Password salah!' };
@@ -39,6 +40,7 @@ export async function POST(request) {
 
     const envAdmin = matchEnvAdmin(username, password);
     if (envAdmin) {
+      await createSession(envAdmin);
       return NextResponse.json({ user: envAdmin });
     }
 
@@ -78,6 +80,7 @@ export async function POST(request) {
       role: found.role,
       nama_lengkap: found.nama_lengkap,
     };
+    await createSession(user);
     return NextResponse.json({ user });
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

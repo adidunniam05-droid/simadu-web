@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import ExcelJS from 'exceljs';
 import { db } from '@/lib/db';
+import { getSessionUser, unauthorized } from '@/lib/session';
 import { readFilters, buildQuery } from '@/lib/simadu-query';
 
 // Batas baris per file agar fungsi server tidak kehabisan memori/waktu.
@@ -17,6 +18,8 @@ const COLUMNS = {
     { header: 'Status', key: 'status_aktif', width: 14 },
   ],
   gtk: [
+    // ID GTK = kunci pencocokan saat file ini di-import ulang
+    { header: 'ID GTK', key: 'id_gtk', width: 18 },
     { header: 'Nama Lengkap', key: 'nama_lengkap', width: 34 },
     { header: 'NIP / NIK', key: 'nip_nik', width: 22 },
     { header: 'Status Kepegawaian', key: 'status_kepegawaian', width: 18 },
@@ -67,6 +70,7 @@ function addSheet(workbook, name, columns, rows) {
 }
 
 export async function GET(request) {
+  if (!(await getSessionUser())) return unauthorized();
   const { searchParams } = new URL(request.url);
   // Tanpa tab (tautan lama) → ekspor kelembagaan seperti sebelumnya.
   if (!searchParams.get('tab') || searchParams.get('tab') === 'dashboard') {
